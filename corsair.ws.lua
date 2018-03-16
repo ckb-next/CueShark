@@ -286,6 +286,10 @@ function cue_proto.dissector(buffer, pinfo, tree)
                 pinfo.cols["info"]:append(" Lift Height")
 
                 -- TODO: Lift Height table
+            elseif arg1 == 0x04 then -- Angle Snap
+                pinfo.cols["info"]:append(" Angle Snap")
+
+                -- TODO: on or off?
             elseif arg1 == 0x05 then -- DPI enabled bitmask
                 pinfo.cols["info"]:append(" DPI Enabled Bitmask")
 
