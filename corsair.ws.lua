@@ -4,8 +4,8 @@ local commands = {
     [0x01] = "HID Event",
     [0x02] = "Media Key Event",
     [0x03] = "Corsair HID Event",
-    [0x07] = "Write",
-    [0x0e] = "Read",
+    [0x07] = "Get",
+    [0x0e] = "Set",
     [0x7f] = "Write Multiple",
     [0xff] = "Read Multiple"
 }
@@ -18,6 +18,7 @@ local subcommands = {
     [0x0a] = "Change Poll Rate",
     [0x0c] = "Start Firmware Update",
     [0x0d] = "Firmware Update Data Position",
+    [0x0e] = "Firmware Update Synchronisation",
     [0x13] = "Mouse Specific",
     [0x14] = "Static Keyboard Profile",
     [0x15] = "Mouse Profile GUID",
@@ -33,6 +34,7 @@ local subcommands = {
 local reset_types = {
     [0x00] = "Medium Reset",
     [0x01] = "Fast Reset",
+    [0x03] = "New Reset", -- Needs to be investigated
     [0xaa] = "Reboot to Bootloader",
     [0xf0] = "Slow Reset"
 }
@@ -87,6 +89,7 @@ local product_ids = {
     [0x1b34] = "GLAIVE RGB",
     [0x1b22] = "KATAR",
     [0x1b35] = "DARK CORE RGB",
+    [0x1b64] = "DARK CORE RGB Dongle",
     [0x1b3b] = "MM800 RGB POLARIS",
     [0x1b2a] = "VOID RGB"
 }
@@ -101,7 +104,17 @@ local layout_types = {
     [0x00] = "ANSI",
     [0x01] = "ISO",
     [0x02] = "ABNT",
-    [0x03] = "JIS"
+    [0x03] = "JIS",
+    [0x04] = "Dubeolsik"
+}
+
+local hwprofile_commands = {
+    [0x05] = "New File",
+    [0x07] = "Switch to File",
+    [0x08] = "End File",
+    [0x09] = "Write Segment",
+    [0x0c] = "Switch Hardware Mode",
+    [0x0d] = "Sync"
 }
 
 local f = cue_proto.fields
@@ -135,16 +148,37 @@ f.ident_devtype = ProtoField.uint8("cue.ident.device_type", "Device Type", base.
 f.ident_layout = ProtoField.uint8("cue.ident.layout", "Keyboard Layout", base.HEX, layout_types)
 
 -- Hardware modes
-f.profile_guid = ProtoField.bytes("cue.profile.guid", "Profile GUID")
+f.profile_guid = ProtoField.guid("cue.profile.guid", "Profile GUID")
+f.profile_name = ProtoField.string("cue.profile.name", "Profile Name")
+
+f.profile_command = ProtoField.uint8("cue.profile.command", "Profile Command", base.DEC, hwprofile_commands)
+f.profile_filename = ProtoField.stringz("cue.profile.filename", "Filename")
+f.profile_mode = ProtoField.uint8("cue.profile.modenum", "Profile Mode Number", base.DEC)
 
 -- Payload fields
 f.payload_payload = ProtoField.bytes("cue.payload.payload", "Payload")
 f.payload_size = ProtoField.uint8("cue.payload.size", "Payload Size", base.DEC)
 f.payload_seqnum = ProtoField.uint8("cue.payload.seqnum", "Payload Sequence Number", base.DEC)
 
+-- Mouse specific
+f.mouse_dpi_x = ProtoField.uint16("cue.mouse.dpi.x", "Mouse X DPI", base.DEC)
+f.mouse_dpi_y = ProtoField.uint16("cue.mouse.dpi.y", "Mouse Y DPI", base.DEC)
+f.mouse_dpi_red = ProtoField.uint8("cue.mouse.dpi.red", "Mouse DPI Indicator Red", base.DEC)
+f.mouse_dpi_green = ProtoField.uint8("cue.mouse.dpi.green", "Mouse DPI Indicator Green", base.DEC)
+f.mouse_dpi_blue = ProtoField.uint8("cue.mouse.dpi.blue", "Mouse DPI Indicator Blue", base.DEC)
+
+f.mouse_pollrate = ProtoField.uint8("cue.mouse.pollrate", "Mouse Poll Rate", base.DEC)
+
 function cue_proto.dissector(buffer, pinfo, tree)
     -- Corsair packets are 64 bytes long.
     if buffer:len() ~= 64 then
+        return
+    end
+    
+    local command = buffer(offset, 1)
+    -- Exclude unknown packet headers
+    if command:uint() ~= 0x07 and command:uint() ~= 0x0e and
+        command:uint() ~= 0x7f and command:uint() ~= 0xff then
         return
     end
 
@@ -153,7 +187,6 @@ function cue_proto.dissector(buffer, pinfo, tree)
     local t_cue = tree:add(cue_proto, buffer())
     local offset = 0
 
-    local command = buffer(offset, 1)
     t_cue:add(f.cmd, command)
     command = command:uint()
     offset = offset + 1
@@ -161,11 +194,11 @@ function cue_proto.dissector(buffer, pinfo, tree)
     local subcommand = buffer(offset, 1)
     offset = offset + 1
 
-    if command == 0x07 or command == 0x0e then -- Write
+    if command == 0x07 or command == 0x0e then -- Read/Write
         if command == 0x07 then
-            pinfo.cols["info"] = "Write"
+            pinfo.cols["info"] = "Set"
         else
-            pinfo.cols["info"] = "Read"
+            pinfo.cols["info"] = "Get"
         end
         t_cue:add(f.subcmd, subcommand)
         subcommand = subcommand:uint()
@@ -195,7 +228,9 @@ function cue_proto.dissector(buffer, pinfo, tree)
             end
             
             -- Keyboard layout
-            if devtype:uint() == 0xc0 then
+            -- The Dark Core dongle describes itself as a keyboard,
+            -- making the script choke, so exclude it.
+            if devtype:uint() == 0xc0 and product:le_uint() ~= 0x1b64 then
                 local layout = buffer(offset + 19, 1)
                 t_cue:add_le(f.ident_layout, layout)
                 pinfo.cols["info"]:append(" " .. layout_types[layout:uint()])
@@ -209,7 +244,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
         elseif subcommand == 0x02 then -- Reset
             local reset_type = buffer(offset, 1)
             t_cue:add(f.reset_type, reset_type)
-            pinfo.cols["info"]:append(" " .. reset_types[reset_type])
+            pinfo.cols["info"]:append(" " .. reset_types[reset_type:uint()])
 
         elseif subcommand == 0x04 then -- Special Function
             local control_type = buffer(offset, 1)
@@ -223,6 +258,11 @@ function cue_proto.dissector(buffer, pinfo, tree)
        
         elseif subcommand == 0x05 then -- Lighting
         
+            if command == 0x0e then
+                pinfo.cols["info"]:append(" Init Sync")
+                return
+            end
+
             local control_type = buffer(offset, 1)
             t_cue:add(f.lighting_mode, control_type)
             
@@ -241,8 +281,6 @@ function cue_proto.dissector(buffer, pinfo, tree)
 
             if control_type:uint() ~= 0x00 then
                 pinfo.cols["info"]:append(" Lighting Mode to " .. control_types[control_type:uint()])
-            elseif command == 0x0e then
-                pinfo.cols["info"]:append(" Init Sync")
             end
 
         elseif subcommand == 0x0a then -- Change Poll Rate
@@ -251,7 +289,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
 
             pinfo.cols["info"]:append(" Poll Rate")
 
-            -- TODO: Add info to tree.
+            t_cue:add(f.mouse_pollrate, pollrate)
 
         elseif subcommand == 0x0c then -- Start Firmware Update
 
@@ -268,6 +306,10 @@ function cue_proto.dissector(buffer, pinfo, tree)
             t_cue:add(f.fwupdate_position, position)
 
             -- TODO: expand this
+
+        elseif subcommand == 0x0e then -- Firmware Synchronisation
+
+            pinfo.cols["info"]:append(" Firmware Synchronisation")
 
         elseif subcommand == 0x13 then -- Mouse Specific
 
@@ -326,14 +368,18 @@ function cue_proto.dissector(buffer, pinfo, tree)
                 -- TODO: Add info to tree
             elseif arg1 >= 0xd0 and arg1 < 0xe0 then -- DPI Profile
                 local zone = arg1 % 16
-                local xdpi = buffer(offset + 4, 2)
-                local ydpi = buffer(offset + 6, 2)
-                local red = buffer(offset + 8, 1)
-                local green = buffer(offset + 9, 1)
-                local blue = buffer(offset + 10, 1)
+                local xdpi = buffer(offset + 3, 2)
+                local ydpi = buffer(offset + 5, 2)
+                local red = buffer(offset + 7, 1)
+                local green = buffer(offset + 8, 1)
+                local blue = buffer(offset + 9, 1)
 
                 pinfo.cols["info"]:append(string.format(" DPI Profile %d", zone))
-                -- TODO: Likewise.
+                t_cue:add_le(f.mouse_dpi_x, xdpi)
+                t_cue:add_le(f.mouse_dpi_y, ydpi)
+                t_cue:add(f.mouse_dpi_red, red)
+                t_cue:add(f.mouse_dpi_green, green)
+                t_cue:add(f.mouse_dpi_blue, blue)
             else
                 pinfo.cols["info"]:append(string.format(" Mouse Unknown %d %d", arg1, arg2))
             end
@@ -363,11 +409,11 @@ function cue_proto.dissector(buffer, pinfo, tree)
         elseif subcommand == 0x15 then -- Profile GUID
 
             local mode = buffer(offset + 1, 1)
-            local guid = buffer(offset + 2, 32)
+            local guid = buffer(offset + 2, 16)
 
             pinfo.cols["info"]:append(string.format(" Profile %d GUID", mode:uint()))
 
-            -- TODO: Investigate how to give Wireshark UTF16LE.
+            t_cue:add(f.profile_guid, guid)
 
         elseif subcommand == 0x16 then -- Profile Name
 
@@ -382,14 +428,28 @@ function cue_proto.dissector(buffer, pinfo, tree)
 
             pinfo.cols["info"]:append(" Animation")
 
-            local arg1 = buffer(offset, 1):uint()
+            local arg1 = buffer(offset, 1)
             local arg2 = buffer(offset + 1, 1):uint()
 
+            t_cue:add(f.profile_command, arg1)
+
+            arg1 = arg1:uint()
+
             -- TODO: Add these to the Wireshark tree
-            if arg1 == 0x05 then -- New File
-                pinfo.cols["info"]:append(" New File")
-            elseif arg1 == 0x07 then -- Switch to File
-                pinfo.cols["info"]:append(" Switch to File")
+            if arg1 == 0x05 then -- Write File
+                pinfo.cols["info"]:append(" Write File: ")
+
+                local filename = buffer(offset + 2, 11)
+                t_cue:add(f.profile_name, filename)
+
+                pinfo.cols["info"]:append(filename:string())
+            elseif arg1 == 0x07 then -- Read File
+                pinfo.cols["info"]:append(" Read File: ")
+
+                local filename = buffer(offset + 2, 11)
+                t_cue:add(f.profile_name, filename)
+
+                pinfo.cols["info"]:append(filename:string())
             elseif arg1 == 0x08 then -- End File
                 pinfo.cols["info"]:append(" End File")
             elseif arg1 == 0x09 then -- Write to Hardware
