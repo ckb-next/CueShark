@@ -28,7 +28,13 @@ local subcommands = {
     [0x25] = "Zoned Colour Change",
     [0x27] = "9-bit Colour Change",
     [0x28] = "24-bit Colour Change",
-    [0x40] = "Key Input Mode"
+    [0x40] = "Key Input Mode",
+    [0x83] = "Wireless Pairing",
+    [0xa6] = "Wireless Settings",
+    [0xaa] = "Wireless Colour Change",
+    [0xac] = "Wireless LED Full Brightness",
+    [0xad] = "Wireless Opacity",
+    [0xae] = "Wireless Identification",
 }
 
 local reset_types = {
@@ -168,6 +174,10 @@ f.mouse_dpi_green = ProtoField.uint8("cue.mouse.dpi.green", "Mouse DPI Indicator
 f.mouse_dpi_blue = ProtoField.uint8("cue.mouse.dpi.blue", "Mouse DPI Indicator Blue", base.DEC)
 
 f.mouse_pollrate = ProtoField.uint8("cue.mouse.pollrate", "Mouse Poll Rate", base.DEC)
+
+-- Wireless settings
+f.wireless_powersave = ProtoField.uint8("cue.wireless.powersave", "Wireless Power Saving", base.DEC)
+f.wireless_sleeptime = ProtoField.uint8("cue.wireless.sleeptime", "Time before sleeping (minutes)")
 
 function cue_proto.dissector(buffer, pinfo, tree)
     -- Corsair packets are 64 bytes long.
@@ -489,9 +499,60 @@ function cue_proto.dissector(buffer, pinfo, tree)
 
             pinfo.cols["info"]:append(" Init Sync")
 
-        elseif subcommand == 0xae then -- Mysterious 0xAE packet
+        elseif subcommand == 0x83 then -- Wireless Pairing
 
-            pinfo.cols["info"]:append(" Mysterious 0xAE")
+            pinfo.cols["info"]:append(" Wireless Pairing")
+
+            local status = buffer(offset + 2, 1):uint()
+
+            if status == 0x01 then
+                pinfo.cols["info"]:append(" Stop")
+            elseif status == 0x02 then
+                pinfo.cols["info"]:append(" Start")
+            end
+
+        elseif subcommand == 0xa6 then -- Wireless Settings
+
+            pinfo.cols["info"]:append(" Wireles Settings")
+
+            local powersave = buffer(offset    , 1)
+            local sleeptime = buffer(offset + 2, 1)
+
+            t_cue:add(f.wireless_powersave, powersave)
+            t_cue:add(f.wireless_sleeptime, sleeptime)
+
+        elseif subcommand == 0xaa then -- Wireless Colour Change
+
+            pinfo.cols["info"]:append(" Wireless Colour Change")
+
+            offset = offset + 2 -- Position at start of payload
+
+            -- Mostly as a reference to myself
+            local anims = {
+                [0x00] = "Colour Shift",
+                [0x01] = "Colour Pulse",
+                [0x03] = "Rainbow",
+                [0x07] = "Static Colour",
+                [0xff] = "No Animation"
+            }
+
+            local lights = buffer(offset, 1)
+            local anim = buffer(offset + 1, 1)
+            local opacity = buffer(offset + 4, 1)
+
+        elseif subcommand == 0xac then -- Wireless LED Full Brightness
+
+            local state = buffer(offset + 2, 1)
+            pinfo.cols["info"]:append(" Wireless LED Full Brightness")
+
+        elseif subcommand == 0xad then -- Wireless Opacity
+
+            local opacity = buffer(offset + 2, 1)
+            pinfo.cols["info"]:append(" Wireless Opacity " .. tostring(opacity:uint()) .. "%")
+
+        elseif subcommand == 0xae then -- Wireless Identification?
+
+            pinfo.cols["info"]:append(" Wireless Identification")
 
             offset = offset + 2 -- Position at start of payload
 
