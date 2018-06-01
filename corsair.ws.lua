@@ -167,6 +167,7 @@ f.payload_size = ProtoField.uint8("cue.payload.size", "Payload Size", base.DEC)
 f.payload_seqnum = ProtoField.uint8("cue.payload.seqnum", "Payload Sequence Number", base.DEC)
 
 -- Mouse specific
+f.mouse_dpi_independent = ProtoField.bool("cue.mouse.dpi.independent", "Mouse Independent X/Y")
 f.mouse_dpi_x = ProtoField.uint16("cue.mouse.dpi.x", "Mouse X DPI", base.DEC)
 f.mouse_dpi_y = ProtoField.uint16("cue.mouse.dpi.y", "Mouse Y DPI", base.DEC)
 f.mouse_dpi_red = ProtoField.uint8("cue.mouse.dpi.red", "Mouse DPI Indicator Red", base.DEC)
@@ -378,6 +379,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
                 -- TODO: Add info to tree
             elseif arg1 >= 0xd0 and arg1 < 0xe0 then -- DPI Profile
                 local zone = arg1 % 16
+                local indepxy = buffer(offset + 2, 1)
                 local xdpi = buffer(offset + 3, 2)
                 local ydpi = buffer(offset + 5, 2)
                 local red = buffer(offset + 7, 1)
@@ -385,6 +387,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
                 local blue = buffer(offset + 9, 1)
 
                 pinfo.cols["info"]:append(string.format(" DPI Profile %d", zone))
+                t_cue:add(f.mouse_dpi_independent, indepxy)
                 t_cue:add_le(f.mouse_dpi_x, xdpi)
                 t_cue:add_le(f.mouse_dpi_y, ydpi)
                 t_cue:add(f.mouse_dpi_red, red)
