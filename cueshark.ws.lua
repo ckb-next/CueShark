@@ -349,7 +349,6 @@ function cue_proto.dissector(buffer, pinfo, tree)
                 local snap = buffer(offset + 2, 1)
                 
                 t_cue:add(f.mouse_snap, snap)
-                -- TODO: on or off?
             elseif arg1 == 0x05 then -- DPI enabled bitmask
                 pinfo.cols["info"]:append(" DPI Enabled Bitmask")
 
@@ -440,7 +439,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
 
             pinfo.cols["info"]:append(string.format(" Profile %d Name", mode:uint()))
 
-            -- TODO: Likewise.
+            t_cue:add(f.profile_name, name)
 
         elseif subcommand == 0x17 then -- Dynamic Keyboard Animation
 
