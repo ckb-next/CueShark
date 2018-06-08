@@ -174,6 +174,8 @@ f.mouse_dpi_red = ProtoField.uint8("cue.mouse.dpi.red", "Mouse DPI Indicator Red
 f.mouse_dpi_green = ProtoField.uint8("cue.mouse.dpi.green", "Mouse DPI Indicator Green", base.DEC)
 f.mouse_dpi_blue = ProtoField.uint8("cue.mouse.dpi.blue", "Mouse DPI Indicator Blue", base.DEC)
 
+f.mouse_snap = ProtoField.bool("cue.mouse.snap", "Angle Snap Enabled")
+
 f.mouse_pollrate = ProtoField.uint8("cue.mouse.pollrate", "Mouse Poll Rate", base.DEC)
 
 -- Wireless settings
@@ -344,6 +346,9 @@ function cue_proto.dissector(buffer, pinfo, tree)
             elseif arg1 == 0x04 then -- Angle Snap
                 pinfo.cols["info"]:append(" Angle Snap")
 
+                local snap = buffer(offset + 2, 1)
+                
+                t_cue:add(f.mouse_snap, snap)
                 -- TODO: on or off?
             elseif arg1 == 0x05 then -- DPI enabled bitmask
                 pinfo.cols["info"]:append(" DPI Enabled Bitmask")
