@@ -521,7 +521,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
 
         elseif subcommand == 0xa6 then -- Wireless Settings
 
-            pinfo.cols["info"]:append(" Wireles Settings")
+            pinfo.cols["info"]:append(" Wireless Settings")
 
             local powersave = buffer(offset    , 1)
             local sleeptime = buffer(offset + 2, 1)
