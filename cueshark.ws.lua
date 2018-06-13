@@ -86,10 +86,10 @@ local product_ids = {
     [0x1b44] = "STRAFE",
     [0x1b12] = "M65 RGB",
     [0x1b2e] = "M65 PRO RGB",
-    [0x1b14] = "SABRE RGB", 
-    [0x1b19] = "SABRE RGB", 
-    [0x1b2f] = "SABRE RGB", 
-    [0x1b32] = "SABRE RGB", 
+    [0x1b14] = "SABRE RGB",
+    [0x1b19] = "SABRE RGB",
+    [0x1b2f] = "SABRE RGB",
+    [0x1b32] = "SABRE RGB",
     [0x1b1e] = "SCIMITAR RGB",
     [0x1b3e] = "SCIMITAR PRO RGB",
     [0x1b3c] = "HARPOON RGB",
@@ -188,7 +188,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
     if buffer:len() ~= 64 then
         return
     end
-    
+
     local command = buffer(offset, 1)
     -- Exclude unknown packet headers
     if command:uint() ~= 0x07 and command:uint() ~= 0x0e and
@@ -204,7 +204,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
     t_cue:add(f.cmd, command)
     command = command:uint()
     offset = offset + 1
-    
+
     local subcommand = buffer(offset, 1)
     offset = offset + 1
 
@@ -216,7 +216,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
         end
         t_cue:add(f.subcmd, subcommand)
         subcommand = subcommand:uint()
-   
+
         if subcommand == 0x01 then -- Firmware Identification
             pinfo.cols["info"]:append(" Identification")
 
@@ -240,7 +240,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
             if vendor:le_uint() ~= 0 and product:le_uint() ~= 0 then
                 pinfo.cols["info"]:append(": " .. vendor_ids[vendor:le_uint()] .. " " .. product_ids[product:le_uint()])
             end
-            
+
             -- Keyboard layout
             -- The Dark Core dongle describes itself as a keyboard,
             -- making the script choke, so exclude it.
@@ -249,7 +249,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
                 t_cue:add_le(f.ident_layout, layout)
                 pinfo.cols["info"]:append(" " .. layout_types[layout:uint()])
             end
-        
+
             -- Device type
             if devtype:uint() >= 0xc0 and devtype:uint() <= 0xc2 then
                 pinfo.cols["info"]:append(" " .. device_types[devtype:uint()])
@@ -263,15 +263,15 @@ function cue_proto.dissector(buffer, pinfo, tree)
         elseif subcommand == 0x04 then -- Special Function
             local control_type = buffer(offset, 1)
             t_cue:add(f.special_mode, control_type)
-        
+
             if control_type:uint() > 2 then
                 pinfo.cols["info"]:append(" Special Function Mode to Unknown")
                 return
             end
             pinfo.cols["info"]:append(" Special Function Mode to " .. control_types[control_type:uint()])
-       
+
         elseif subcommand == 0x05 then -- Lighting
-        
+
             if command == 0x0e then
                 pinfo.cols["info"]:append(" Init Sync")
                 return
@@ -279,7 +279,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
 
             local control_type = buffer(offset, 1)
             t_cue:add(f.lighting_mode, control_type)
-            
+
             if control_type:uint() > 2 then
                 -- TODO: Strafe sidelights?
                 --[[if control_type:uint() == 8 then
@@ -312,7 +312,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
             -- TODO: expand this
 
         elseif subcommand == 0x0d then -- Firmware Update Data Position
-            
+
             local position = buffer(offset + 4, 1)
 
             pinfo.cols["info"]:append(" Firmware Update Data Position")
@@ -348,7 +348,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
                 pinfo.cols["info"]:append(" Angle Snap")
 
                 local snap = buffer(offset + 2, 1)
-                
+
                 t_cue:add(f.mouse_snap, snap)
             elseif arg1 == 0x05 then -- DPI enabled bitmask
                 pinfo.cols["info"]:append(" DPI Enabled Bitmask")
@@ -405,9 +405,9 @@ function cue_proto.dissector(buffer, pinfo, tree)
         elseif subcommand == 0x14 then -- Keyboard Profile
 
             local proftype = buffer(offset, 1)
-            local mode = buffer(offset + 4, 1)
-            local colour = buffer(offset + 5, 1)
-            
+            local mode = buffer(offset + 3, 1)
+            local colour = buffer(offset + 4, 1)
+
             pinfo.cols["info"]:append(" Keyboard Profile " .. tostring(mode))
 
             if proftype:uint() == 0x02 then
@@ -429,7 +429,11 @@ function cue_proto.dissector(buffer, pinfo, tree)
             local mode = buffer(offset + 1, 1)
             local guid = buffer(offset + 2, 16)
 
-            pinfo.cols["info"]:append(string.format(" Profile %d GUID", mode:uint()))
+            if mode:uint() == 0 then
+                pinfo.cols["info"]:append(" SW Profile GUID")
+            else
+                pinfo.cols["info"]:append(string.format(" HW Profile %d GUID", mode:uint()))
+            end
 
             t_cue:add(f.profile_guid, guid)
 
@@ -438,9 +442,14 @@ function cue_proto.dissector(buffer, pinfo, tree)
             local mode = buffer(offset + 1, 1)
             local name = buffer(offset + 2, 32)
 
-            pinfo.cols["info"]:append(string.format(" Profile %d Name", mode:uint()))
+            if mode:uint() == 0 then
+                pinfo.cols["info"]:append(" SW Profile Name")
+            else
+                pinfo.cols["info"]:append(string.format(" HW Profile %d Name", mode:uint()))
+            end
 
-            t_cue:add(f.profile_name, name)
+            -- Thanks to @Lekensteyn on GitHub for suggesting this to print UTF16LE.
+            t_cue:add_packet_field(f.profile_name, name, ENC_LITTLE_ENDIAN+ENC_UTF_16)
 
         elseif subcommand == 0x17 then -- Dynamic Keyboard Animation
 
@@ -478,7 +487,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
                 pinfo.cols["info"]:append(" Sync")
             end
         elseif subcommand == 0x22 then -- Mouse Colour Change
-    
+
             -- If Corsair hadn't reused this for mousepads,
             -- it might be possible to actually break it down into
             -- viewable sections. Such is the way of things.
@@ -494,13 +503,13 @@ function cue_proto.dissector(buffer, pinfo, tree)
             pinfo.cols["info"]:append(" 9-bit Colour Change")
 
         elseif subcommand == 0x28 then -- 24-bit Colour Change
-            
+
             local colour = buffer(offset, 1)
             t_cue:add(f.colour_type, colour)
             pinfo.cols["info"]:append(" 24-bit Colour Change " .. colour_types[colour:uint()])
-       
+
         elseif subcommand == 0x40 then -- Key Input Mode
-            
+
             pinfo.cols["info"]:append(" Key Input Mode")
 
         elseif subcommand == 0x48 then -- Init Sync?
@@ -586,7 +595,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
         else
             pinfo.cols["info"]:append(" Unknown " .. tostring(subcommand))
         end
-    
+
     elseif command == 0x7f or command == 0xff then
 
         if command == 0x7f then
