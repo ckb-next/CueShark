@@ -230,7 +230,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
             local devtype = buffer(offset + 16, 1)
 
             t_cue:add_le(f.ident_fwver, fwver)
-            t_cue:add_le(f.ident_bldver, bldver)
+            t_cue:add(f.ident_bldver, bldver)
             t_cue:add_le(f.ident_vendor, vendor)
             t_cue:add_le(f.ident_product, product)
             t_cue:add_le(f.ident_pollrate, pollrate)
