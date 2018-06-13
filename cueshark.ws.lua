@@ -4,8 +4,8 @@ local commands = {
     [0x01] = "HID Event",
     [0x02] = "Media Key Event",
     [0x03] = "Corsair HID Event",
-    [0x07] = "Get",
-    [0x0e] = "Set",
+    [0x07] = "Set",
+    [0x0e] = "Get",
     [0x7f] = "Write Multiple",
     [0xff] = "Read Multiple"
 }
