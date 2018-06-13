@@ -35,6 +35,7 @@ local subcommands = {
     [0xac] = "Wireless LED Full Brightness",
     [0xad] = "Wireless Opacity",
     [0xae] = "Wireless Identification",
+    [0xff] = "Get Multiple"
 }
 
 local reset_types = {
