@@ -184,6 +184,7 @@ f.mouse_pollrate = ProtoField.uint8("cue.mouse.pollrate", "Mouse Poll Rate", bas
 f.wireless_powersave = ProtoField.uint8("cue.wireless.powersave", "Wireless Power Saving", base.DEC)
 f.wireless_sleeptime = ProtoField.uint8("cue.wireless.sleeptime", "Time before sleeping (minutes)")
 f.wireless_id = ProtoField.uint32("cue.wireless.pairing_id", "Wireless pairing ID")
+f.wireless_fwver = ProtoField.uint16("cue.wireless.fwver", "Radio Firmware Version", base.HEX)
 
 function cue_proto.dissector(buffer, pinfo, tree)
     -- Corsair packets are 64 bytes long.
@@ -586,10 +587,12 @@ function cue_proto.dissector(buffer, pinfo, tree)
             local vendor = buffer(offset, 2)
             local product = buffer(offset + 2, 2)
             local fwver = buffer(offset + 4, 2)
+            local status1 = buffer(offset + 9, 1)
+            local status2 = buffer(offset + 10, 1)
 
             t_cue:add_le(f.ident_vendor, vendor)
             t_cue:add_le(f.ident_product, product)
-            t_cue:add_le(f.ident_fwver, fwver)
+            t_cue:add_le(f.wireless_fwver, fwver)
 
         elseif subcommand == 0xff then -- Read Multiple (synonym)
             local seqnum = buffer(offset, 1)
