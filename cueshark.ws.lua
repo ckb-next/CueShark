@@ -29,7 +29,8 @@ local subcommands = {
     [0x27] = "9-bit Colour Change",
     [0x28] = "24-bit Colour Change",
     [0x40] = "Key Input Mode",
-    [0x83] = "Wireless Pairing",
+    [0x4a] = "Wireless Pairing ID",
+    [0x83] = "Wireless Begin Pairing",
     [0xa6] = "Wireless Settings",
     [0xaa] = "Wireless Colour Change",
     [0xac] = "Wireless LED Full Brightness",
@@ -182,6 +183,7 @@ f.mouse_pollrate = ProtoField.uint8("cue.mouse.pollrate", "Mouse Poll Rate", bas
 -- Wireless settings
 f.wireless_powersave = ProtoField.uint8("cue.wireless.powersave", "Wireless Power Saving", base.DEC)
 f.wireless_sleeptime = ProtoField.uint8("cue.wireless.sleeptime", "Time before sleeping (minutes)")
+f.wireless_id = ProtoField.uint32("cue.wireless.pairing_id", "Wireless pairing ID")
 
 function cue_proto.dissector(buffer, pinfo, tree)
     -- Corsair packets are 64 bytes long.
@@ -516,9 +518,17 @@ function cue_proto.dissector(buffer, pinfo, tree)
 
             pinfo.cols["info"]:append(" Init Sync")
 
-        elseif subcommand == 0x83 then -- Wireless Pairing
+        elseif subcommand == 0x4a then -- Wireless Pairing ID
 
-            pinfo.cols["info"]:append(" Wireless Pairing")
+            local id = buffer(offset + 2, 4)
+
+            pinfo.cols["info"]:append(" Pairing ID")
+
+            t_cue:add_le(f.wireless_id, id)
+
+        elseif subcommand == 0x83 then -- Begin Wireless Pairing
+
+            pinfo.cols["info"]:append(" Begin Wireless Pairing")
 
             local status = buffer(offset + 2, 1):uint()
 
