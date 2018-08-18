@@ -156,7 +156,7 @@ f.ident_devtype = ProtoField.uint8("cue.ident.device_type", "Device Type", base.
 f.ident_layout = ProtoField.uint8("cue.ident.layout", "Keyboard Layout", base.HEX, layout_types)
 
 -- Hardware modes
-f.profile_init_buffer = ProtoField.uint16("cue.profile.init.bufsize", "Data buffer size")
+f.profile_init_buffer = ProtoField.uint16("cue.profile.init.bufsize", "Data Buffer Size")
 
 f.profile_guid = ProtoField.guid("cue.profile.guid", "Profile GUID")
 f.profile_name = ProtoField.string("cue.profile.name", "Profile Name")
@@ -164,6 +164,8 @@ f.profile_name = ProtoField.string("cue.profile.name", "Profile Name")
 f.profile_command = ProtoField.uint8("cue.profile.command", "Profile Command", base.DEC, hwprofile_commands)
 f.profile_filename = ProtoField.stringz("cue.profile.filename", "Filename")
 f.profile_mode = ProtoField.uint8("cue.profile.modenum", "Profile Mode Number", base.DEC)
+
+f.profile_status = ProtoField.uint8("cue.profile.status", "Profile Operation Status")
 
 -- Payload fields
 f.payload_payload = ProtoField.bytes("cue.payload.payload", "Payload")
@@ -495,7 +497,10 @@ function cue_proto.dissector(buffer, pinfo, tree)
             elseif arg1 == 0x0c then -- Switch Hardware Mode
                 pinfo.cols["info"]:append(string.format(" Switch to Mode %d", arg2))
             elseif arg1 == 0x0d then -- Sync
-                pinfo.cols["info"]:append(" Sync")
+                pinfo.cols["info"]:append(" Status")
+
+                local status = buffer(offset + 2, 1)
+                t_cue:add(f.profile_status, status)
             end
         elseif subcommand == 0x22 then -- Mouse Colour Change
 
