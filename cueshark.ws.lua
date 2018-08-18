@@ -156,6 +156,8 @@ f.ident_devtype = ProtoField.uint8("cue.ident.device_type", "Device Type", base.
 f.ident_layout = ProtoField.uint8("cue.ident.layout", "Keyboard Layout", base.HEX, layout_types)
 
 -- Hardware modes
+f.profile_init_buffer = ProtoField.uint16("cue.profile.init.bufsize", "Data buffer size")
+
 f.profile_guid = ProtoField.guid("cue.profile.guid", "Profile GUID")
 f.profile_name = ProtoField.string("cue.profile.name", "Profile Name")
 
@@ -466,7 +468,13 @@ function cue_proto.dissector(buffer, pinfo, tree)
             arg1 = arg1:uint()
 
             -- TODO: Add these to the Wireshark tree
-            if arg1 == 0x05 then -- Write File
+            if arg1 == 0x01 then -- Init
+                pinfo.cols["info"]:append(" Info")
+
+                local buffer_size = buffer(offset + 12, 2)
+                t_cue:add_le(f.profile_init_buffer, buffer_size)
+
+            elseif arg1 == 0x05 then -- Write File
                 pinfo.cols["info"]:append(" Write File: ")
 
                 local filename = buffer(offset + 2, 11)
