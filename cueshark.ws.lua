@@ -117,12 +117,17 @@ local layout_types = {
 }
 
 local hwprofile_commands = {
-    [0x05] = "New File",
+    [0x01] = "Get Buffer Size",
+    [0x03] = "Get File Size",
+    [0x04] = "Get File List",
+    [0x05] = "Write to Filename",
     [0x07] = "Switch to File",
     [0x08] = "End File",
     [0x09] = "Write Segment",
+    [0x0a] = "Set Read Mode",
+    [0x0b] = "Set Write Mode",
     [0x0c] = "Switch Hardware Mode",
-    [0x0d] = "Sync"
+    [0x0d] = "Get Last Status"
 }
 
 local f = cue_proto.fields
@@ -158,6 +163,8 @@ f.ident_layout = ProtoField.uint8("cue.ident.layout", "Keyboard Layout", base.HE
 -- Hardware modes
 f.profile_init_buffer = ProtoField.uint16("cue.profile.init.bufsize", "Data Buffer Size")
 
+f.profile_size = ProtoField.uint32("cue.profile.size", "Profile File Size")
+
 f.profile_guid = ProtoField.guid("cue.profile.guid", "Profile GUID")
 f.profile_name = ProtoField.string("cue.profile.name", "Profile Name")
 
@@ -189,6 +196,9 @@ f.wireless_powersave = ProtoField.uint8("cue.wireless.powersave", "Wireless Powe
 f.wireless_sleeptime = ProtoField.uint8("cue.wireless.sleeptime", "Time before sleeping (minutes)")
 f.wireless_id = ProtoField.uint32("cue.wireless.pairing_id", "Wireless pairing ID")
 f.wireless_fwver = ProtoField.uint16("cue.wireless.fwver", "Radio Firmware Version", base.HEX)
+
+-- Misc
+f.somethingu32 = ProtoField.uint32("cue.something", "Something", base.HEX)
 
 function cue_proto.dissector(buffer, pinfo, tree)
     -- Corsair packets are 64 bytes long.
@@ -470,11 +480,39 @@ function cue_proto.dissector(buffer, pinfo, tree)
             arg1 = arg1:uint()
 
             -- TODO: Add these to the Wireshark tree
-            if arg1 == 0x01 then -- Init
+            if arg1 == 0x01 then -- File Size
                 pinfo.cols["info"]:append(" Info")
 
                 local buffer_size = buffer(offset + 12, 2)
                 t_cue:add_le(f.profile_init_buffer, buffer_size)
+
+            elseif arg1 == 0x03 then -- File Size
+                pinfo.cols["info"]:append(" File Size")
+
+                local size = buffer(offset + 3, 4)
+
+            elseif arg1 == 0x04 then -- File List
+                pinfo.cols["info"]:append(" File List")
+
+                offset = offset + 2
+                
+                local guid = buffer(offset, 16)
+                local something = buffer(offset + 16, 4)
+                t_cue:add(f.profile_guid, guid)
+                t_cue:add_le(f.somethingu32, something)
+                offset = offset + 20
+
+                local guid = buffer(offset, 16)
+                local something = buffer(offset + 16, 4)
+                t_cue:add(f.profile_guid, guid)
+                t_cue:add_le(f.somethingu32, something)
+                offset = offset + 20
+
+                local guid = buffer(offset, 16)
+                local something = buffer(offset + 16, 4)
+                t_cue:add(f.profile_guid, guid)
+                t_cue:add_le(f.somethingu32, something)
+                offset = offset + 20
 
             elseif arg1 == 0x05 then -- Write File
                 pinfo.cols["info"]:append(" Write File: ")
@@ -483,6 +521,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
                 t_cue:add(f.profile_name, filename)
 
                 pinfo.cols["info"]:append(filename:string())
+            
             elseif arg1 == 0x07 then -- Read File
                 pinfo.cols["info"]:append(" Read File: ")
 
@@ -490,17 +529,30 @@ function cue_proto.dissector(buffer, pinfo, tree)
                 t_cue:add(f.profile_name, filename)
 
                 pinfo.cols["info"]:append(filename:string())
+            
             elseif arg1 == 0x08 then -- End File
                 pinfo.cols["info"]:append(" End File")
+            
             elseif arg1 == 0x09 then -- Write to Hardware
                 pinfo.cols["info"]:append(" To Hardware")
+            
+            elseif arg1 == 0x0a then
+                pinfo.cols["info"]:append(" Mode: Read")
+            
+            elseif arg1 == 0x0b then
+                pinfo.cols["info"]:append(" Mode: Write")
+            
             elseif arg1 == 0x0c then -- Switch Hardware Mode
                 pinfo.cols["info"]:append(string.format(" Switch to Mode %d", arg2))
+            
             elseif arg1 == 0x0d then -- Sync
                 pinfo.cols["info"]:append(" Status")
 
                 local status = buffer(offset + 2, 1)
                 t_cue:add(f.profile_status, status)
+            
+            elseif arg1 == 0x0e then
+                pinfo.cols["info"]:append(" Mysterious 0x0e")
             end
         elseif subcommand == 0x22 then -- Mouse Colour Change
 
