@@ -29,6 +29,8 @@ local subcommands = {
     [0x27] = "9-bit Colour Change",
     [0x28] = "24-bit Colour Change",
     [0x40] = "Key Input Mode",
+    [0x50] = "Battery Status",
+    [0x51] = "Connection Status",
     [0x4a] = "Wireless Pairing ID",
     [0x83] = "Wireless Begin Pairing",
     [0xa6] = "Wireless Settings",
@@ -583,6 +585,14 @@ function cue_proto.dissector(buffer, pinfo, tree)
         elseif subcommand == 0x48 then -- Init Sync?
 
             pinfo.cols["info"]:append(" Init Sync")
+        
+        elseif subcommand == 0x50 then -- Battery Status
+
+            pinfo.cols["info"]:append(" Battery Status")
+
+        elseif subcommand == 0x51 then --Connection Status?
+
+            pinfo.cols["info"]:append(" Connection Status")                     
 
         elseif subcommand == 0x4a then -- Wireless Pairing ID
 
