@@ -100,6 +100,8 @@ local product_ids = {
     [0x1b22] = "KATAR",
     [0x1b35] = "DARK CORE RGB",
     [0x1b64] = "DARK CORE RGB Dongle",
+    [0x1b51] = "DARK CORE RGB SE Dongle",
+    [0x1b4b] = "DARK CORE RGB SE",
     [0x1b3b] = "MM800 RGB POLARIS",
     [0x1b2a] = "VOID RGB"
 }
