@@ -29,6 +29,8 @@ local subcommands = {
     [0x27] = "9-bit Colour Change",
     [0x28] = "24-bit Colour Change",
     [0x40] = "Key Input Mode",
+    [0x50] = "Battery Status",
+    [0x51] = "Connection Status",
     [0x4a] = "Wireless Pairing ID",
     [0x83] = "Wireless Begin Pairing",
     [0xa6] = "Wireless Settings",
@@ -98,6 +100,8 @@ local product_ids = {
     [0x1b22] = "KATAR",
     [0x1b35] = "DARK CORE RGB",
     [0x1b64] = "DARK CORE RGB Dongle",
+    [0x1b51] = "DARK CORE RGB SE Dongle",
+    [0x1b4b] = "DARK CORE RGB SE",
     [0x1b3b] = "MM800 RGB POLARIS",
     [0x1b2a] = "VOID RGB"
 }
@@ -128,6 +132,24 @@ local hwprofile_commands = {
     [0x0b] = "Set Write Mode",
     [0x0c] = "Switch Hardware Mode",
     [0x0d] = "Get Last Status"
+}
+
+local battery_types = {
+    [0x00] = "Not connected",
+    [0x01] = "Critical",
+    [0x02] = "Low",
+    [0x03] = "Medium",
+    [0x04] = "High"
+}
+
+local battery_charging = {
+    [0x01] = "Not charging",
+    [0x02] = "Charging"
+}
+
+local connection_types = {
+    [0x01] = "Not connected",
+    [0x02] = "Connected"
 }
 
 local f = cue_proto.fields
@@ -583,6 +605,29 @@ function cue_proto.dissector(buffer, pinfo, tree)
         elseif subcommand == 0x48 then -- Init Sync?
 
             pinfo.cols["info"]:append(" Init Sync")
+        
+        elseif subcommand == 0x50 then -- Battery Status
+
+            local charging = buffer(offset + 3, 1):uint()
+            
+            pinfo.cols["info"]:append(" Battery Status")
+
+            --Is there a better way to detect whether the traffic is inbound?
+            if not (charging == 0x00) then
+                local battery = buffer(offset + 2, 1):uint()
+
+                pinfo.cols["info"]:append(": " .. battery_types[battery] .. ", " .. battery_charging[charging])
+            end
+
+        elseif subcommand == 0x51 then --Connection Status?
+            
+            local status = buffer(offset + 2, 1):uint()
+
+            pinfo.cols["info"]:append(" Connection Status")
+
+            if not (status == 0x00) then
+                pinfo.cols["info"]:append(": " .. connection_types[status])
+            end
 
         elseif subcommand == 0x4a then -- Wireless Pairing ID
 
