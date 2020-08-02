@@ -134,6 +134,24 @@ local hwprofile_commands = {
     [0x0d] = "Get Last Status"
 }
 
+local battery_types = {
+    [0x00] = "Not connected",
+    [0x01] = "Critical",
+    [0x02] = "Low",
+    [0x03] = "Medium",
+    [0x04] = "High"
+}
+
+local battery_charging = {
+    [0x01] = "Not charging",
+    [0x02] = "Charging"
+}
+
+local connection_types = {
+    [0x01] = "Not connected",
+    [0x02] = "Connected"
+}
+
 local f = cue_proto.fields
 
 -- Root commands
@@ -590,11 +608,26 @@ function cue_proto.dissector(buffer, pinfo, tree)
         
         elseif subcommand == 0x50 then -- Battery Status
 
+            local charging = buffer(offset + 3, 1):uint()
+            
             pinfo.cols["info"]:append(" Battery Status")
 
-        elseif subcommand == 0x51 then --Connection Status?
+            --Is there a better way to detect whether the traffic is inbound?
+            if not (charging == 0x00) then
+                local battery = buffer(offset + 2, 1):uint()
 
-            pinfo.cols["info"]:append(" Connection Status")                     
+                pinfo.cols["info"]:append(": " .. battery_types[battery] .. ", " .. battery_charging[charging])
+            end
+
+        elseif subcommand == 0x51 then --Connection Status?
+            
+            local status = buffer(offset + 2, 1):uint()
+
+            pinfo.cols["info"]:append(" Connection Status")
+
+            if not (status == 0x00) then
+                pinfo.cols["info"]:append(": " .. connection_types[status])
+            end
 
         elseif subcommand == 0x4a then -- Wireless Pairing ID
 
