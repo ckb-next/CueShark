@@ -41,6 +41,40 @@ local subcommands = {
     [0xff] = "Get Multiple"
 }
 
+local brightness_modes = {
+    [0x00] = "Full Brightness",
+    [0x01] = "Limited Brightness",
+}
+
+local brightness_levels = {
+    [0x00] = "0%",
+    [0x01] = "33%",
+    [0x02] = "67%",
+    [0x03] = "100%"
+}
+
+local lighting_effect_types = {
+    [0x00] = "No effect (lights off)",
+    [0x01] = "Pulse",
+    [0x04] = "Wave",
+    [0x05] = "Visor",
+    [0x06] = "Rain",
+    [0x07] = "Static colour",
+    [0x08] = "Type lighting key",
+    [0x09] = "Type lighting ripple"
+}
+
+local lighting_effect_speed_levels = {
+    [0x01] = "Low",
+    [0x02] = "Medium",
+    [0x03] = "High"
+}
+
+local lighting_effect_direction_types = {
+    [0x01] = "Left",
+    [0x02] = "Right"
+}
+
 local reset_types = {
     [0x00] = "Medium Reset",
     [0x01] = "Fast Reset",
@@ -67,6 +101,8 @@ local vendor_ids = {
 local product_ids = {
     [0x1b3d] = "K55 RGB",
     [0x1b40] = "K63",
+    [0x1b8c] = "K63 Wireles (cable)",
+    [0x1b8f] = "K63 Wireles (dongle)",
     [0x1b17] = "K65 RGB",
     [0x1b07] = "K65",
     [0x1b37] = "K65 LUX RGB",
@@ -167,6 +203,15 @@ f.reset_type = ProtoField.uint8("cue.reset.type", "Reset Type", base.HEX, reset_
 f.special_mode = ProtoField.uint8("cue.special_function.mode", "Special Function Control Mode", base.DEC, control_types)
 f.lighting_mode = ProtoField.uint8("cue.lighting.mode", "Lighting Control Mode", base.DEC, control_types)
 
+f.brightness_level = ProtoField.uint8("cue.lighting.brightness", "Brightness", base.DEC, brightness_levels)
+f.brightness_mode = ProtoField.uint8("cue.lighting.brightness.mode", "Brightness Mode", base.DEC, brightness_modes)
+
+-- Lightning Effect Subcommands
+f.lighting_effect = ProtoField.uint8("cue.lighting.effect", "Lighting Effect", base.DEC, lighting_effect_types)
+f.lighting_effect_speed = ProtoField.uint8("cue.lighting.effect.level", "Lighting Effect Speed", base.DEC, lighting_effect_speed_levels)
+f.lighting_effect_direction = ProtoField.uint8("cue.lighting.effect.direction", "Lighting Effect Direction", base.DEC, lighting_effect_direction_types)
+f.lighting_effect_opacity = ProtoField.uint8("cue.lighting.effect.opacity", "Lighting Effect Opacity", base.DEC)
+
 -- Colour Subcommands
 f.colour_type = ProtoField.uint8("cue.colour.type", "Colour Type", base.DEC, colour_types)
 
@@ -246,7 +291,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
 
     local subcommand = buffer(offset, 1)
     offset = offset + 1
-
+ 
     if command == 0x07 or command == 0x0e then -- Read/Write
         if command == 0x07 then
             pinfo.cols["info"] = "Set"
@@ -319,6 +364,11 @@ function cue_proto.dissector(buffer, pinfo, tree)
             local control_type = buffer(offset, 1)
             t_cue:add(f.lighting_mode, control_type)
 
+            local brightness_level = buffer(offset + 2, 1)
+            if control_type:uint() == 2 and brightness_level:uint() <= 3 then 
+                    t_cue:add(f.brightness_level, brightness_level)
+            end
+            
             if control_type:uint() > 2 then
                 -- TODO: Strafe sidelights?
                 --[[if control_type:uint() == 8 then
@@ -334,6 +384,10 @@ function cue_proto.dissector(buffer, pinfo, tree)
 
             if control_type:uint() ~= 0x00 then
                 pinfo.cols["info"]:append(" Lighting Mode to " .. control_types[control_type:uint()])
+            end
+            
+            if control_type:uint() == 2 and brightness_levels[brightness_level:uint()] then
+                    pinfo.cols["info"]:append(", " .. brightness_levels[brightness_level:uint()])
             end
 
         elseif subcommand == 0x0a then -- Change Poll Rate
@@ -661,28 +715,59 @@ function cue_proto.dissector(buffer, pinfo, tree)
 
         elseif subcommand == 0xaa then -- Wireless Colour Change
 
-            pinfo.cols["info"]:append(" Wireless Colour Change")
-
             offset = offset + 2 -- Position at start of payload
-
+            
+            -- pinfo.cols["info"]:append(" Wireless Colour Change")
+            
             -- Mostly as a reference to myself
-            local anims = {
-                [0x00] = "Colour Shift",
-                [0x01] = "Colour Pulse",
-                [0x03] = "Rainbow",
-                [0x07] = "Static Colour",
-                [0xff] = "No Animation"
-            }
+            -- local anims = {
+            --    [0x00] = "Colour Shift",
+            --    [0x01] = "Colour Pulse",
+            --    [0x03] = "Rainbow",
+            --    [0x07] = "Static Colour",
+            --    [0xff] = "No Animation"
+            -- }
 
-            local lights = buffer(offset, 1)
-            local anim = buffer(offset + 1, 1)
-            local opacity = buffer(offset + 4, 1)
+            -- local lights = buffer(offset, 1)
+            -- local anim = buffer(offset + 1, 1)
+            -- local opacity = buffer(offset + 4, 1)
 
+            -- does the lights var above means the animation style? then it matches effect var
+            -- does the anim var above means the animation speed? then it matches speed var
+            -- for opacity we could have opacity #1, #2, as the offset+4 is always 0 on K63
+            
+            pinfo.cols["info"]:append(" Lighting Effect Change")
+
+            -- K63 Wireless
+            local effect = buffer(offset, 1)
+            local speed = buffer(offset + 1, 1)
+            local direction = buffer(offset + 2, 1)
+            local opacity = buffer(offset + 3, 1)
+            
+            t_cue:add(f.lighting_effect, effect)
+            t_cue:add(f.lighting_effect_speed, speed)
+            t_cue:add(f.lighting_effect_direction, direction)
+            t_cue:add(f.lighting_effect_opacity, opacity)
+            
         elseif subcommand == 0xac then -- Wireless LED Full Brightness
 
-            local state = buffer(offset + 2, 1)
             pinfo.cols["info"]:append(" Wireless LED Full Brightness")
-
+            
+            
+            local brightness_mode = buffer(offset + 2, 1)
+            
+            if brightness_mode:uint() > 1 then
+                return
+            end
+            
+            t_cue:add(f.brightness_mode, brightness_mode)
+                        
+            if brightness_mode:uint() == 0x00 then
+                pinfo.cols["info"]:append(": Enable")
+            elseif brightness_mode:uint() == 0x01 then
+                pinfo.cols["info"]:append(": Disable")
+            end			
+            
         elseif subcommand == 0xad then -- Wireless Opacity
 
             local opacity = buffer(offset + 2, 1)
