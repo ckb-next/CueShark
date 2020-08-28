@@ -273,6 +273,7 @@ function cue_proto.dissector(buffer, pinfo, tree)
         return
     end
 
+    local offset = 0
     local command = buffer(offset, 1)
     -- Exclude unknown packet headers
     if command:uint() ~= 0x07 and command:uint() ~= 0x0e and
@@ -283,7 +284,6 @@ function cue_proto.dissector(buffer, pinfo, tree)
     pinfo.cols["protocol"] = "CUE"
 
     local t_cue = tree:add(cue_proto, buffer())
-    local offset = 0
 
     t_cue:add(f.cmd, command)
     command = command:uint()
