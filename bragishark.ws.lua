@@ -131,6 +131,9 @@ f.payload = ProtoField.bytes("bragi.payload", "Payload")
 -- Unknown
 f.unknown = ProtoField.uint8("bragi.unknown", "Unknown", base.HEX)
 
+f.extra_hid = ProtoField.bytes("bragi.extra_hid", "Extra HID")
+f.hid = ProtoField.bytes("bragi.hid", "HID")
+
 -- Used to get the packet direction
 --urb_dir_f = Field.new("usb.endpoint_address.direction")
 -- Above doesn't work for usbip
@@ -212,25 +215,43 @@ function parse_property(t_bragi, pinfo, property, buffer, offset)
 end
 
 function bragi_proto.dissector(buffer, pinfo, tree)
-    -- Bragi packets are 64 bytes long.
-    if buffer:len() ~= 64 then
-        return
-    end
-
     local urb_src = urb_src_f().value
     local urb_dst = urb_dst_f().value
     local urb_dir = 1
+    local urb_ep_str = urb_src
     if urb_src == "host" then
         urb_dir = 0
+        urb_ep_str = urb_dst
     end
+
+    local urb_ep_num = tonumber(string.match(urb_ep_str, "%d+%.%d+%.(%d+)"))
+
+    -- Bragi packets are 64 bytes long, except for HID input which is 16
+    if buffer:len() ~= 64 and (buffer:len() ~= 16 and urb_ep_num ~= 1 and urb_dir ~= 1) then
+        return
+    end
+
+
     local frame_no = frame_no_f().value
-    
+
     local offset = 1
     local command = buffer(offset, 1)
 
     pinfo.cols["protocol"] = "Bragi"
 
     local t_bragi = tree:add(bragi_proto, buffer())
+
+    if urb_dir == 1 and urb_ep_num == 3 then
+        pinfo.cols["info"] = "Bragi extra key input"
+        t_bragi:add(f.extra_hid, buffer())
+        return
+    end
+
+    if urb_dir == 1 and urb_ep_num == 1 then
+        pinfo.cols["info"] = "Bragi HID input"
+        t_bragi:add(f.hid, buffer())
+        return
+    end
 
     t_bragi:add(f.cmd, command)
     command = command:uint()
