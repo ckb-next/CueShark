@@ -16,7 +16,7 @@ local commands = {
     [0x06] = "Begin Write",
     [0x07] = "Continue Write",
     [0x08] = "Read chunk",
-    [0x08] = "Probe resource",
+    [0x09] = "Probe resource", -- This has to be a probe function, because it happens before a read/write.
     [0x0d] = "Open handle",
     [0x12] = "Ping"
 }
@@ -24,7 +24,7 @@ local commands = {
 -- FIXME
 local req_status = {
     [0x00] = "Success",
-    [0x01] = "Possible success?", -- CUE doesn't seem to ask for the resource again after this
+    [0x01] = "ERROR: Unknown", -- CUE doesn't seem to ask for the resource again after this. It also doesn't close the handle, so it has to be an error.
     [0x03] = "ERROR: Handle already open", -- possibly?
 }
 
@@ -47,6 +47,7 @@ local properties = {
     [0x13] = "APP FW Version",
     [0x14] = "BLD FW Version",
     [0x15] = "Wireless Chip FW Version",
+    [0x36] = "Connected Subdevice Bitfield", -- fwiw CUE calls this a bitmap
     [0x41] = "Hardware Layout",
     [0x44] = "Brightness Level Index",
     [0x45] = "WinLock Enabled",
@@ -131,6 +132,29 @@ f.payload = ProtoField.bytes("bragi.payload", "Payload")
 -- Unknown
 f.unknown = ProtoField.uint8("bragi.unknown", "Unknown", base.HEX)
 
+-- Bragi first byte
+-- 0...3 -> target device. 0 is the current device that we're talking to
+-- 4     -> Seems set when direction is OUT. Seems odd that the direction is in the packet itself though.
+-- 5...8 -> Unknown
+f.header = ProtoField.uint8("bragi.header", "Header", base.HEX)
+f.target = ProtoField.uint8("bragi.target", "Target device", base.DEC, NULL, 0x7)
+local t_direction = {
+    [0x00] = "IN",
+    [0x01] = "OUT",
+}
+f.direction = ProtoField.uint8("bragi.direction", "Direction", base.DEC, t_direction, 0x8)
+
+-- subdevice bitfield definitions
+f.sub = ProtoField.uint8("bragi.subdev", "Subdevice Bitfield", base.HEX)
+f.sub0 = ProtoField.bool("bragi.subdev.0", "Subdevice 0 (unused)", 8, NULL, 0x1)
+f.sub1 = ProtoField.bool("bragi.subdev.1", "Subdevice 1", 8, NULL, 0x2)
+f.sub2 = ProtoField.bool("bragi.subdev.2", "Subdevice 2", 8, NULL, 0x4)
+f.sub3 = ProtoField.bool("bragi.subdev.3", "Subdevice 3", 8, NULL, 0x8)
+f.sub4 = ProtoField.bool("bragi.subdev.4", "Subdevice 4", 8, NULL, 0x10)
+f.sub5 = ProtoField.bool("bragi.subdev.5", "Subdevice 5", 8, NULL, 0x20)
+f.sub6 = ProtoField.bool("bragi.subdev.6", "Subdevice 6", 8, NULL, 0x40)
+f.sub7 = ProtoField.bool("bragi.subdev.7", "Subdevice 7", 8, NULL, 0x80)
+
 f.extra_hid = ProtoField.bytes("bragi.extra_hid", "Extra HID")
 f.hid = ProtoField.bytes("bragi.hid", "HID")
 
@@ -168,6 +192,7 @@ function parse_property(t_bragi, pinfo, property, buffer, offset)
     local valueint = value:uint()
     local valuestr = "Unknown"
     local skip_offset = 1
+    local showvalue = true
     if property == 0x01 then -- pollrate
         t_bragi:add(f.prop_pollrate, value)
         valuestr = table_to_string(prop_pollrate, valueint)
@@ -208,8 +233,21 @@ function parse_property(t_bragi, pinfo, property, buffer, offset)
     elseif property == 0x0d then -- sleep delay enabled
         t_bragi:add(f.prop_sleep_timeout_enabled, value)
         valuestr = value:uint()
+    elseif property == 0x36 then -- subdevice bitfield
+        showvalue = false
+        local bitf = t_bragi:add(f.sub, value)
+        bitf:add(f.sub0, value)
+        bitf:add(f.sub1, value)
+        bitf:add(f.sub2, value)
+        bitf:add(f.sub3, value)
+        bitf:add(f.sub4, value)
+        bitf:add(f.sub5, value)
+        bitf:add(f.sub6, value)
+        bitf:add(f.sub7, value)
     end
-    pinfo.cols["info"]:append(" = " .. valuestr)
+    if showvalue then
+        pinfo.cols["info"]:append(" = " .. valuestr)
+    end
     -- We don't need the offset anymore after we're done with this function
     --return skip_offset
 end
@@ -234,9 +272,6 @@ function bragi_proto.dissector(buffer, pinfo, tree)
 
     local frame_no = frame_no_f().value
 
-    local offset = 1
-    local command = buffer(offset, 1)
-
     pinfo.cols["protocol"] = "Bragi"
 
     local t_bragi = tree:add(bragi_proto, buffer())
@@ -253,14 +288,23 @@ function bragi_proto.dissector(buffer, pinfo, tree)
         return
     end
 
+    local offset = 0
+    local firstbyte = buffer(offset, 1)
+    local targetint = bit.band(firstbyte:uint(), 0x07)
+    local header = t_bragi:add(f.header, firstbyte)
+    header:add(f.target, firstbyte)
+    header:add(f.direction, firstbyte)
+    offset = offset + 1
+
+    local command = buffer(offset, 1)
     t_bragi:add(f.cmd, command)
     command = command:uint()
     offset = offset + 1
-    
-    pinfo.cols["info"] = table_to_string(commands, command)
+
+    pinfo.cols["info"] = "Dev " .. tostring(targetint) .. ": " .. table_to_string(commands, command)
     if urb_dir == 0 then -- Request
         pinfo.cols["info"]:append(" Request")
-        
+
         if command == 0x01 or command == 0x02 then -- Set/Get
             local property = buffer(offset, 1)
             offset = offset + 2
@@ -325,8 +369,8 @@ function bragi_proto.dissector(buffer, pinfo, tree)
             return
         end
 
+        offset = offset + 1
         if command == 0x02 then
-            offset = offset + 1
             if bragi_get_queue_frame[frame_no] == nil then
                 local usbstr = usbstr_strip_endpoint(urb_src)
                 local property = bragi_get_queue[usbstr]
@@ -338,6 +382,12 @@ function bragi_proto.dissector(buffer, pinfo, tree)
             pinfo.cols["info"]:append(" (" .. table_to_string(properties, property))
             parse_property(t_bragi, pinfo, property, buffer, offset)
             pinfo.cols["info"]:append(")")
+        elseif command == 0x09 then -- Probe
+            offset = offset + 1
+            offset = offset + 1
+            -- Start of length field
+            local length = buffer(offset, 4)
+            t_bragi:add_le(f.length, length)
         end
     end
 end
