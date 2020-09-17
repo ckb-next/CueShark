@@ -134,15 +134,11 @@ f.unknown = ProtoField.uint8("bragi.unknown", "Unknown", base.HEX)
 
 -- Bragi first byte
 -- 0...3 -> target device. 0 is the current device that we're talking to
--- 4     -> Seems set when direction is OUT. Seems odd that the direction is in the packet itself though.
+-- 4     -> Set when we want the device to respond to us. If this bit is 0, the device will not respond.
 -- 5...8 -> Unknown
 f.header = ProtoField.uint8("bragi.header", "Header", base.HEX)
 f.target = ProtoField.uint8("bragi.target", "Target device", base.DEC, NULL, 0x7)
-local t_direction = {
-    [0x00] = "IN",
-    [0x01] = "OUT",
-}
-f.direction = ProtoField.uint8("bragi.direction", "Direction", base.DEC, t_direction, 0x8)
+f.direction = ProtoField.bool("bragi.request_response", "Should the device respond?", 8, NULL, 0x8)
 
 -- subdevice bitfield definitions
 f.sub = ProtoField.uint8("bragi.subdev", "Subdevice Bitfield", base.HEX)
