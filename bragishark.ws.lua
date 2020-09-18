@@ -38,6 +38,7 @@ local bragi_get_queue_frame = {}
 local properties = {
     [0x01] = "Pollrate",
     [0x03] = "Mode",
+    [0x07] = "Angle Snapping",
     [0x0d] = "Automatic Sleep Enabled",
     [0x0e] = "Automatic Sleep Timeout",
     [0x0f] = "Battery Level",
@@ -47,6 +48,10 @@ local properties = {
     [0x13] = "APP FW Version",
     [0x14] = "BLD FW Version",
     [0x15] = "Wireless Chip FW Version",
+    [0x1e] = "Active DPI Stage",
+    [0x21] = "DPI - X Axis",
+    [0x22] = "DPI - Y Axis",
+    [0x23] = "DPI Stage 0 - X Axis", -- This one is really weird. It's the X DPI of the first stage. Makes no sense
     [0x36] = "Connected Subdevice Bitfield", -- fwiw CUE calls this a bitmap
     [0x41] = "Hardware Layout",
     [0x44] = "Brightness Level Index",
@@ -63,6 +68,7 @@ local vendor_ids = {
 local product_ids = {
     [0x1b62] = "K57 RGB Wireless Dongle",
     [0x1b6e] = "K57 RGB Wireless",
+    [0x1b4c] = "Ironclaw Wireless RGB",
 }
 --[[
 local layout_types = {
@@ -154,6 +160,14 @@ f.sub7 = ProtoField.bool("bragi.subdev.7", "Subdevice 7", 8, NULL, 0x80)
 f.extra_hid = ProtoField.bytes("bragi.extra_hid", "Extra HID")
 f.hid = ProtoField.bytes("bragi.hid", "HID")
 
+f.angle_snapping = ProtoField.bool("bragi.angle_snapping", "Angle Snapping Enabled")
+
+-- DPI-related
+f.dpi_x = ProtoField.uint16("bragi.dpi_x", "DPI - X Axis", base.DEC)
+f.dpi_y = ProtoField.uint16("bragi.dpi_y", "DPI - Y Axis", base.DEC)
+f.dpi_0_x = ProtoField.uint16("bragi.dpi_0_x", "DPI 0 - X Axis", base.DEC)
+f.dpi_stage = ProtoField.uint8("bragi.dpi_stage", "Active DPI Stage")
+
 -- Used to get the packet direction
 --urb_dir_f = Field.new("usb.endpoint_address.direction")
 -- Above doesn't work for usbip
@@ -240,6 +254,24 @@ function parse_property(t_bragi, pinfo, property, buffer, offset)
         bitf:add(f.sub5, value)
         bitf:add(f.sub6, value)
         bitf:add(f.sub7, value)
+    elseif property == 0x07 then -- angle snapping
+        t_bragi:add(f.angle_snapping, value)
+        valuestr = tostring(valueint)
+    elseif property == 0x21 then -- DPI X
+        value = buffer(offset, 2)
+        t_bragi:add_le(f.dpi_x, value)
+        valuestr = tostring(value:le_uint())
+    elseif property == 0x22 then -- DPI Y
+        value = buffer(offset, 2)
+        t_bragi:add_le(f.dpi_y, value)
+        valuestr = tostring(value:le_uint())
+    elseif property == 0x23 then -- DPI stage 0 X
+        value = buffer(offset, 2)
+        t_bragi:add_le(f.dpi_0_x, value)
+        valuestr = tostring(value:le_uint())
+    elseif property == 0x1e then -- active DPI stage
+        t_bragi:add(f.dpi_stage, value)
+        valuestr = tostring(valueint)
     end
     if showvalue then
         pinfo.cols["info"]:append(" = " .. valuestr)
