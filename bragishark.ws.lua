@@ -26,8 +26,8 @@ local req_status = {
     [0x00] = "Success",
     [0x01] = "ERROR: Unknown", -- CUE doesn't seem to ask for the resource again after this. It also doesn't close the handle, so it has to be an error.
     [0x03] = "ERROR: Handle already open", -- possibly?
-    [0x05] = "ERROR: Unknown property (GUESS)", -- ???
-    [0x06] = "ERROR: Unknown resource (GUESS)", -- ???
+    [0x05] = "ERROR: Property not supported", -- ???
+    [0x06] = "ERROR: Invalid device address", -- ???
 }
 
 -- Temporarily stores the last property that was requested from the device
@@ -139,7 +139,7 @@ local resources = {
     [0x02] = "Unknown 0x02",
     [0x05] = "Pairing ID",
     [0x0f] = "Hardware Profile Status (GUESS)",
-    [0x27] = "Unknown 0x27",
+    [0x27] = "Error Log",
     [0x60] = "Hardware Profile 1: subpacket 4 (GUESS)",
     [0x61] = "Hardware Profile 1: subpacket 1 (GUESS)",
     [0x62] = "Hardware Profile 1: subpacket 2 (GUESS)",
