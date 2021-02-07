@@ -66,7 +66,7 @@ local properties = {
     [0x4a] = "WinLock Disabled Shortcuts",
     [0x5f] = "MultipointConnectionSupport",
     [0x6e] = "Unknown 0x6e",
-    [0x96] = "Unknown 0x96",
+    [0x96] = "Maximum Polling Rate (GUESS)",
 }
 
 -- USB IDs
