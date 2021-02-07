@@ -26,6 +26,8 @@ local req_status = {
     [0x00] = "Success",
     [0x01] = "ERROR: Unknown", -- CUE doesn't seem to ask for the resource again after this. It also doesn't close the handle, so it has to be an error.
     [0x03] = "ERROR: Handle already open", -- possibly?
+    [0x05] = "ERROR: Unknown property (GUESS)", -- ???
+    [0x06] = "ERROR: Unknown resource (GUESS)", -- ???
 }
 
 -- Temporarily stores the last property that was requested from the device
@@ -37,8 +39,11 @@ local bragi_get_queue_frame = {}
 
 local properties = {
     [0x01] = "Pollrate",
+    [0x02] = "Unknown 0x02",
     [0x03] = "Mode",
     [0x07] = "Angle Snapping",
+    [0x09] = "Unknown 0x09",
+    [0x0a] = "Unknown 0x0a",
     [0x0d] = "Automatic Sleep Enabled",
     [0x0e] = "Automatic Sleep Timeout",
     [0x0f] = "Battery Level",
@@ -53,11 +58,15 @@ local properties = {
     [0x22] = "DPI - Y Axis",
     [0x23] = "DPI Stage 0 - X Axis", -- This one is really weird. It's the X DPI of the first stage. Makes no sense
     [0x36] = "Connected Subdevice Bitfield", -- fwiw CUE calls this a bitmap
+    [0x38] = "Unknown 0x38",
+    [0x39] = "Unknown 0x39",
     [0x41] = "Hardware Layout",
     [0x44] = "Brightness Level Index",
     [0x45] = "WinLock Enabled",
     [0x4a] = "WinLock Disabled Shortcuts",
     [0x5f] = "MultipointConnectionSupport",
+    [0x6e] = "Unknown 0x6e",
+    [0x96] = "Unknown 0x96",
 }
 
 -- USB IDs
@@ -69,6 +78,7 @@ local product_ids = {
     [0x1b62] = "K57 RGB Wireless Dongle",
     [0x1b6e] = "K57 RGB Wireless",
     [0x1b4c] = "Ironclaw Wireless RGB",
+    [0x1b89] = "K95 Platinum XT",
 }
 --[[
 local layout_types = {
@@ -126,7 +136,35 @@ f.prop_sleep_timeout_enabled = ProtoField.bool("bragi.prop_sleep_timeout_enabled
 -- Resource IDs used to get handles
 local resources = {
     [0x01] = "Lighting",
+    [0x02] = "Unknown 0x02",
     [0x05] = "Pairing ID",
+    [0x0f] = "Hardware Profile Status (GUESS)",
+    [0x27] = "Unknown 0x27",
+    [0x60] = "Hardware Profile 1: subpacket 4 (GUESS)",
+    [0x61] = "Hardware Profile 1: subpacket 1 (GUESS)",
+    [0x62] = "Hardware Profile 1: subpacket 2 (GUESS)",
+    [0x63] = "Hardware Profile 1: subpacket 3 (GUESS)",
+    [0x64] = "Hardware Profile 2: subpacket 4 (GUESS)",
+    [0x65] = "Hardware Profile 2: subpacket 1 (GUESS)",
+    [0x66] = "Hardware Profile 2: subpacket 2 (GUESS)",
+    [0x67] = "Hardware Profile 2: subpacket 3 (GUESS)",
+    [0x68] = "Hardware Profile 3: subpacket 4 (GUESS)",
+    [0x69] = "Hardware Profile 3: subpacket 1 (GUESS)",
+    [0x6a] = "Hardware Profile 3: subpacket 2 (GUESS)",
+    [0x6b] = "Hardware Profile 3: subpacket 3 (GUESS)",
+    [0x6c] = "Hardware Profile 4: subpacket 4 (GUESS)",
+    [0x6d] = "Hardware Profile 4: subpacket 1 (GUESS)",
+    [0x6e] = "Hardware Profile 4: subpacket 2 (GUESS)",
+    [0x6f] = "Hardware Profile 4: subpacket 3 (GUESS)",
+    [0x70] = "Hardware Profile 5: subpacket 4 (GUESS)",
+    [0x71] = "Hardware Profile 5: subpacket 1 (GUESS)",
+    [0x72] = "Hardware Profile 5: subpacket 2 (GUESS)",
+    [0x73] = "Hardware Profile 5: subpacket 3 (GUESS)",
+    [0x74] = "Hardware Profile 1: main packet (GUESS)",
+    [0x75] = "Hardware Profile 2: main packet (GUESS)",
+    [0x76] = "Hardware Profile 3: main packet (GUESS)",
+    [0x77] = "Hardware Profile 4: main packet (GUESS)",
+    [0x78] = "Hardware Profile 5: main packet (GUESS)",
 }
 f.resource = ProtoField.uint8("bragi.resource", "Resource ID", base.HEX, resources)
 f.handle = ProtoField.uint8("bragi.handle", "Handle ID", base.HEX)
@@ -272,6 +310,16 @@ function parse_property(t_bragi, pinfo, property, buffer, offset)
     elseif property == 0x1e then -- active DPI stage
         t_bragi:add(f.dpi_stage, value)
         valuestr = tostring(valueint)
+    elseif property == 0x13 then -- APP FW version
+        local major = buffer(offset, 1)
+        local minor = buffer(offset+1, 1)
+        local patch = buffer(offset+2, 1)
+        valuestr = string.format("%d.%d.%d", major:uint(), minor:uint(), patch:uint())
+    elseif property == 0x14 then -- BLD FW version
+        local major = buffer(offset, 1)
+        local minor = buffer(offset+1, 1)
+        local patch = buffer(offset+2, 1)
+        valuestr = string.format("%d.%d.%d", major:uint(), minor:uint(), patch:uint())
     end
     if showvalue then
         pinfo.cols["info"]:append(" = " .. valuestr)
@@ -378,6 +426,14 @@ function bragi_proto.dissector(buffer, pinfo, tree)
             local payload = buffer(offset)
             t_bragi:add(f.payload, payload)
         elseif command == 0x07 then -- Continue write
+            local handle = buffer(offset, 1)
+            offset = offset + 1
+            t_bragi:add(f.handle, handle)
+            pinfo.cols["info"]:append(" for handle " .. tostring(handle:uint()))
+            
+            local payload = buffer(offset)
+            t_bragi:add(f.payload, payload)
+        elseif command == 0x08 then -- Read chunk
             local handle = buffer(offset, 1)
             offset = offset + 1
             t_bragi:add(f.handle, handle)
