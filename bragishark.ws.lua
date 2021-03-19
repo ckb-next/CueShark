@@ -80,14 +80,6 @@ local product_ids = {
     [0x1b4c] = "Ironclaw Wireless RGB",
     [0x1b89] = "K95 Platinum XT",
 }
---[[
-local layout_types = {
-    [0x00] = "ANSI",
-    [0x01] = "ISO",
-    [0x02] = "ABNT",
-    [0x03] = "JIS",
-    [0x04] = "Dubeolsik"
-}]]--
 
 local f = bragi_proto.fields
 
@@ -118,7 +110,11 @@ local prop_pollrate = {
 f.prop_pollrate = ProtoField.uint8("bragi.prop_pollrate", "Pollrate", base.HEX, prop_pollrate)
 
 local prop_hwlayout = {
-    [0x02] = "ISO" -- This might be wrong
+    [0x00] = "Unknown",
+    [0x01] = "ANSI",
+    [0x02] = "ISO",
+    [0x03] = "Unknown",
+    [0x04] = "Unknown",
 }
 f.prop_hwlayout = ProtoField.uint8("bragi.prop_hwlayout", "Hardware Layout", base.HEX, prop_hwlayout)
 
@@ -262,6 +258,9 @@ function parse_property(t_bragi, pinfo, property, buffer, offset)
     elseif property == 0x10 then -- battery status
         t_bragi:add(f.prop_batterystatus, value)
         valuestr = table_to_string(prop_batterystatus, valueint)
+    elseif property == 0x41 then -- hw layout
+        t_bragi:add(f.prop_hwlayout, value)
+        valuestr = table_to_string(prop_hwlayout, valueint)
     elseif property == 0x44 then -- brightness
         t_bragi:add(f.brightness, value)
         valuestr = tostring(valueint)
